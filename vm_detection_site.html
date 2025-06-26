@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>VM-Erkennung</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 2rem;
+      background: #f9f9f9;
+    }
+    button {
+      padding: 1rem;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    pre {
+      background: #eee;
+      padding: 1rem;
+      overflow-x: auto;
+    }
+    .verdict {
+      margin-top: 1rem;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>Virtuelle Maschine erkennen</h1>
+  <button onclick="detectVM()">Detect System</button>
+  <pre id="results"></pre>
+  <div class="verdict" id="verdict"></div>
+
+  <script>
+    async function detectVM() {
+      const result = {};
+
+      // Bildschirm & Auflösung
+      result.screen = `${screen.width}x${screen.height}`;
+      result.devicePixelRatio = window.devicePixelRatio;
+
+      // CPU & RAM
+      result.hardwareConcurrency = navigator.hardwareConcurrency;
+      if (navigator.deviceMemory)
+        result.deviceMemory = navigator.deviceMemory + " GB";
+
+      // Sprache & Zeitzone
+      result.language = navigator.language;
+      result.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+      // WebGL Info
+      try {
+        const canvas = document.createElement("canvas");
+        const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+        const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+        result.webglVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+        result.webglRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+      } catch (e) {
+        result.webglRenderer = "Unavailable";
+      }
+
+      // AudioContext
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        result.audioSampleRate = audioCtx.sampleRate;
+        result.audioLatency = audioCtx.outputLatency || "n/a";
+      } catch (e) {
+        result.audio = "Unavailable";
+      }
+
+      // Fonts-Erkennung (rudimentär)
+      // Fonts-Erkennung (rudimentär)
+      result.fontsAvailable = document.fonts.check("12px monospace") ? "Likely" : "Unknown";
+
+
+      // Plugins
+      result.pluginsCount = navigator.plugins.length;
+
+      // Touch Unterstützung
+      result.touchSupport = 'ontouchstart' in window;
+
+      // Media Devices
+      try {
+        const media = await navigator.mediaDevices.enumerateDevices();
+        result.audioInput = media.filter(d => d.kind === 'audioinput').length;
+        result.videoInput = media.filter(d => d.kind === 'videoinput').length;
+      } catch (e) {
+        result.mediaDevices = "Unavailable";
+      }
+
+      // Mismatch Detection
+      result.timeLangMismatch = result.language.startsWith("de") && !result.timezone.includes("Berlin") ? "Yes" : "No";
+
+      // Bewertung
+      let vmScore = 0;
+
+      if (screen.width <= 1024 || screen.height <= 768) vmScore++;
+      if (navigator.hardwareConcurrency <= 2) vmScore++;
+      if (navigator.plugins.length === 0) vmScore++;
+      if (result.webglRenderer && /VirtualBox|Microsoft Basic Render/i.test(result.webglRenderer)) vmScore++;
+      if (result.deviceMemory && parseFloat(result.deviceMemory) <= 4) vmScore++;
+      if (result.timeLangMismatch === "Yes") vmScore++;
+      if (result.audioInput === 0 && result.videoInput === 0) vmScore++;
+
+      // Ausgabe
+      document.getElementById("results").textContent = JSON.stringify(result, null, 2);
+
+      let verdictText = "System ist vermutlich nativ.";
+      if (vmScore >= 4) verdictText = "⚠️ Hohes Risiko: VM wahrscheinlich.";
+      else if (vmScore >= 2) verdictText = "⚠️ Mögliche VM-Anzeichen vorhanden.";
+
+      document.getElementById("verdict").textContent = verdictText;
+    }
+  </script>
+</body>
+</html>
