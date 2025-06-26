@@ -29,11 +29,14 @@
   <h1>Virtuelle Maschine erkennen</h1>
   <button onclick="detectVM()">Detect System</button>
   <pre id="results"></pre>
+  <pre id="scoreDetails"></pre>
   <div class="verdict" id="verdict"></div>
 
   <script>
     async function detectVM() {
       const result = {};
+      const scoreBreakdown = [];
+      let score = 0;
 
       // Bildschirm & Auflösung
       result.screen = `${screen.width}x${screen.height}`;
@@ -66,6 +69,8 @@
         result.audioLatency = audioCtx.outputLatency || "n/a";
       } catch (e) {
         result.audio = "Unavailable";
+        score += 1;
+        scoreBreakdown.push("Audio unavailable (+1)");
       }
 
       // Fonts-Erkennung (rudimentär)
@@ -90,26 +95,53 @@
       result.timeLangMismatch = result.language.startsWith("de") && !result.timezone.includes("Berlin") ? "Yes" : "No";
 
       // Bewertung mit Gewichtung
-      let score = 0;
+      if (result.webglVendor && /vmware|virtualbox|qemu|parallels/i.test(result.webglVendor)) {
+        score += 3;
+        scoreBreakdown.push(`WebGL-Vendor indicates VM (${result.webglVendor}) (+3)`);
+      }
 
-      // Gewichtete Kriterien
-      if (result.webglVendor && /vmware|virtualbox|qemu|parallels/i.test(result.webglVendor)) score += 3;
-      if (result.webglRenderer && /generic|microsoft basic render/i.test(result.webglRenderer)) score += 2;
-      if (result.audio === "Unavailable") score += 1;
-      if (navigator.hardwareConcurrency <= 2) score += 1;
-      if (result.deviceMemory && parseFloat(result.deviceMemory) <= 4) score += 1;
-      if (result.pluginsCount === 0) score += 1;
-      if (result.audioInput === 0) score += 1;
-      if (result.videoInput === 0) score += 1;
-      if (result.timeLangMismatch === "Yes") score += 1;
+      if (result.webglRenderer && /generic|microsoft basic render/i.test(result.webglRenderer)) {
+        score += 2;
+        scoreBreakdown.push(`WebGL-Renderer is generic (${result.webglRenderer}) (+2)`);
+      }
+
+      if (navigator.hardwareConcurrency <= 2) {
+        score += 1;
+        scoreBreakdown.push(`Low CPU cores (${navigator.hardwareConcurrency}) (+1)`);
+      }
+
+      if (result.deviceMemory && parseFloat(result.deviceMemory) <= 4) {
+        score += 1;
+        scoreBreakdown.push(`Low memory (${result.deviceMemory}) (+1)`);
+      }
+
+      if (result.pluginsCount === 0) {
+        score += 1;
+        scoreBreakdown.push(`No plugins installed (+1)`);
+      }
+
+      if (result.audioInput === 0) {
+        score += 1;
+        scoreBreakdown.push(`No audio input device (+1)`);
+      }
+
+      if (result.videoInput === 0) {
+        score += 1;
+        scoreBreakdown.push(`No video input device (+1)`);
+      }
+
+      if (result.timeLangMismatch === "Yes") {
+        score += 1;
+        scoreBreakdown.push(`Language/timezone mismatch (+1)`);
+      }
 
       // Ausgabe
       document.getElementById("results").textContent = JSON.stringify(result, null, 2);
+      document.getElementById("scoreDetails").textContent = scoreBreakdown.join("\n");
 
-      let verdictText = "System ist vermutlich nativ.";
+      let verdictText = "✔️ System sieht nativ aus (Score: " + score + ")";
       if (score >= 6) verdictText = "⚠️ Sehr wahrscheinlich eine VM (Score: " + score + ")";
       else if (score >= 3) verdictText = "⚠️ Mögliche VM-Anzeichen (Score: " + score + ")";
-      else verdictText = "✔️ System sieht nativ aus (Score: " + score + ")";
 
       document.getElementById("verdict").textContent = verdictText;
     }
